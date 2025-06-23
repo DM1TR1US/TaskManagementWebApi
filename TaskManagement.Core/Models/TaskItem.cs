@@ -35,7 +35,18 @@ public class TaskItem
     public bool WasAssignedToAll(IEnumerable<Guid> allUserIds)
     {
         var distinctAssigned = AssignmentHistory.Distinct().ToHashSet();
-        return allUserIds.All(id => distinctAssigned.Contains(id));
+        return allUserIds.All(id => distinctAssigned.Contains(id) || AssignedUserId == id);
+    }
+
+    public void CompleteTask()
+    {
+        if (AssignedUserId is Guid currentUser)
+        {
+            AssignmentHistory.Add(currentUser);
+            AssignedUser = null;
+        }
+
+        State = TaskState.Completed; 
     }
 
     private bool IsValidAssignee(Guid newUserId)

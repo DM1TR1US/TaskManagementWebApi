@@ -56,17 +56,16 @@ public class TaskService(ILogger<TaskService> logger, ITaskRepository taskReposi
 
                 foreach (var task in tasks.Where(t => t.State != TaskState.Completed))
                 {
-                    if (TryAssignPreferredUser(task, users) || TryAssignFromQueue(task, users))
+                    if (!TryAssignPreferredUser(task, users))
                     {
                         if (task.WasAssignedToAll(allUserIds))
                         {
-                            task.State = TaskState.Completed;
-                            task.AssignedUserId = null;
+                            task.CompleteTask();
                         }
-                    }
-                    else if (task.AssignedUserId == null)
-                    {
-                        task.State = TaskState.Waiting;
+                        else
+                        {
+                            task.State = TaskState.Waiting;
+                        }
                     }
                 }
 
@@ -91,38 +90,13 @@ public class TaskService(ILogger<TaskService> logger, ITaskRepository taskReposi
 
     private bool TryAssignPreferredUser(TaskItem task, List<UserItem> users)
     {
-        var index = task.AssignmentHistory.Count;
+        var assigned = task.AssignmentHistory.Distinct().ToHashSet();
+        var candidate = users.FirstOrDefault(u => !assigned.Contains(u.Id) && task.AssignedUserId != u.Id);
 
-        if (index + 1 < users.Count)
+        if (candidate != null && task.AssignTo(candidate.Id))
         {
-            var candidate = users[index + 1];
-
-            if (task.AssignTo(candidate.Id))
-            {
-                logger.LogInformation("Task {Title} reassigned (preferred) to {UserId}", task.Title, task.AssignedUserId);
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private bool TryAssignFromQueue(TaskItem task, List<UserItem> users)
-    {
-        Queue<Guid> userQueue = new(users.Select(u => u.Id));
-        var userCount = userQueue.Count;
-
-        for (int i = 0; i < userCount; i++)
-        {
-            var candidate = userQueue.Dequeue();
-
-            if (task.AssignTo(candidate))
-            {
-                logger.LogInformation("Task {Title} reassigned to {UserId}", task.Title, task.AssignedUserId);
-                return true;
-            }
-
-            userQueue.Enqueue(candidate);
+            logger.LogInformation("Task {Title} reassigned (preferred) to {UserId}", task.Title, task.AssignedUserId);
+            return true;
         }
 
         return false;
